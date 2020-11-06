@@ -1,0 +1,11 @@
+# You will want to update the image to use a specific version of the alpine image
+FROM node:alpine
+
+WORKDIR /app
+
+COPY app_name/package.json ./
+COPY app_name/package-lock.json ./
+
+RUN npm ci
+
+CMD ["npm", "start"]

@@ -1,0 +1,54 @@
+# .coveragerc to control coverage.py
+# Must be in the same directory that you call the coverage command from
+# https://coverage.readthedocs.io/en/v4.5.x/config.html#config
+
+
+[run]
+# Get branch coverage as well as statement coverage
+branch = True
+
+# By default, coverage measures all code
+# Specify what to include in measurement using include
+include = 
+    # Include everything in a folder
+    ./*
+# If you want to exclude certain files/directories from measurement, use the omit value
+omit = 
+    # Omit everything in a folder
+    /tests/*
+# Coverage first reduces files measured to those named by include, then removes those that are in omit
+
+#----------
+
+[report]
+# Exclusions from coverage
+exclude_lines = 
+    # Standard way to exclude individual lines/blocks of code
+    # Leave this as a comment after the line/block to exclude that section of code from the coverage check
+    pragma: no cover
+
+    # Ignore debug-only code
+    # Add any other repeated debug blocks to not use the pragma comment unnecessarily
+    def __repr__
+
+    # Ignore code that may not be run
+    if __name__ == .__main__.:
+
+# Target cover percentage. If coverage is below this number, it exits with a status code of 2
+fail_under = $COVERAGE_THRESHOLD
+
+# Number of digits to display after the decimal point for reported coverage %. Default 0.
+precision = 2
+
+# Shows missing lines in summary report. Default false
+# Not needed if you can open the HTML file (probably if running locally), otherwise useful if just viewing in command line
+show_missing = True
+
+#----------
+
+[html]
+# The directory to write the HTML report files to. Default "htmlcov"
+directory = htmlcov
+
+[xml]
+output = coverage.xml

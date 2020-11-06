@@ -1,0 +1,102 @@
+/**
+ * Gets the stage name for this job
+ * @return String
+ */
+def getStageName() {
+    if (env.TAG_NAME != null) {
+        return "prod"
+    }
+    return env.BRANCH_NAME == "master" ? "dev" : env.BRANCH_NAME
+}
+
+/**
+ * Gets the version for this build (either the tag or the branch)
+ * @return String
+ */
+def getVersion() {
+    if (env.TAG_NAME != null) {
+        return env.TAG_NAME
+    }
+    return env.BRANCH_NAME
+}
+
+pipeline {
+
+    agent any
+
+    environment {
+        STAGE = getStageName()
+        VERSION = getVersion()
+        SLACK_CHANNEL = '#my-alerts' // TODO: Change to the appropriate slack channel
+        // Namespaces docker-compose to not compete with concurrent builds
+        COMPOSE_PROJECT_NAME = "pennyworth-${env.BRANCH_NAME}-${currentBuild.id}"
+    }
+
+    stages {
+
+        stage('Build') {
+            steps {
+                sh 'make build'
+            }
+        }
+
+        stage('Unit tests with coverage') {
+            steps {
+                sh 'make unit-coverage'
+            }
+        }
+
+        stage('System tests with coverage') {
+            steps {
+                sh 'make system-coverage'
+
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                sh 'make lint'
+            }
+        }
+    
+        stage('Deploy') {
+            when {
+                anyOf {
+                    environment name: 'STAGE', value: 'prod'
+                    environment name: 'STAGE', value: 'dev'
+                }
+            }
+            steps {
+                sh 'make deploy'
+            }
+        }
+    }
+
+    post {
+
+        success {
+            slackSend (color: '#00FF00',
+                message: "SUCCESSFUL\nJob: '${env.BUILD_TAG}'\nStage: ${env.STAGE}\nVersion: ${env.VERSION}\nView build: (${env.BUILD_URL})",
+                channel: "${SLACK_CHANNEL}")
+        }
+
+        failure {
+            slackSend (color: '#FF0000',
+                message: "FAILED\nJob: '${env.BUILD_TAG}'\nStage: ${env.STAGE}\nVersion: ${env.VERSION}\nView build: (${env.BUILD_URL})",
+                channel: "${SLACK_CHANNEL}")
+        }
+
+        aborted {
+            slackSend (color: '#FF9500',
+                message: "ABORTED\nJob: '${env.BUILD_TAG}'\nStage: ${env.STAGE}\nVersion: ${env.VERSION}\nView build: (${env.BUILD_URL})",
+                channel: "${SLACK_CHANNEL}")
+        }
+
+        cleanup {
+            junit './*_test.xml'
+            publishCoverage adapters: [istanbulCobertura('unit-coverage.xml')], sourceFileResolver: sourceFiles('STORE_ALL_BUILD'), tag: 'cov'
+            publishCoverage adapters: [istanbulCobertura('system-coverage.xml')], sourceFileResolver: sourceFiles('STORE_ALL_BUILD'), tag: 'cov'
+            cleanWs();
+        }
+    }
+}

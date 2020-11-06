@@ -1,0 +1,90 @@
+pipeline {
+
+    agent { node { label 'ubuntu-18.04-worker' } }
+
+    environment {
+        SLACK_CHANNEL = '#my-alerts' // TODO: Change to the appropriate slack channel
+        BUILD_ID = "${env.BRANCH_NAME}-${currentBuild.id}"
+        COMPOSE_PROJECT_NAME = "pennyworth-${env.BRANCH_NAME}-${currentBuild.id}"
+        VERSION = "${env.TAG_NAME ? env.TAG_NAME : ''}"
+
+        // AWS Settings
+        AWS_DEFAULT_REGION = 'us-east-1'
+        AWS_ACCESS_KEY_ID = sh(script: "curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/jenkins_worker | jq -r '.AccessKeyId'", , returnStdout: true).trim()
+        AWS_SECRET_ACCESS_KEY = sh(script: "curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/jenkins_worker | jq -r '.SecretAccessKey'", , returnStdout: true).trim()
+        AWS_SESSION_TOKEN = sh(script: "curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/jenkins_worker | jq -r '.Token'", , returnStdout: true).trim()
+    }
+
+    stages {
+
+        stage('Inject package version') {
+            steps {
+                sh 'make inject-package-version'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'make build'
+            }
+        }
+
+        stage('Unit tests with coverage') {
+            steps {
+                sh 'make unit-coverage'
+            }
+        }
+
+        stage('System tests with coverage') {
+            steps {
+                sh 'make system-coverage'
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                sh 'make lint'
+            }
+        }
+    
+        stage('Publish package') {
+            when {
+                not {
+                    environment name: 'VERSION', value: ''
+                }
+            }
+            steps {
+                sh 'make dist-package'
+            }
+        }
+    }
+
+    post {
+
+        success {
+            slackSend (color: '#00FF00',
+                message: "SUCCESSFUL\nJob: '${env.BUILD_TAG}'\nStage: ${env.STAGE}\nVersion: ${env.VERSION}\nView build: (${env.BUILD_URL})",
+                channel: "${SLACK_CHANNEL}")
+        }
+
+        failure {
+            slackSend (color: '#FF0000',
+                message: "FAILED\nJob: '${env.BUILD_TAG}'\nStage: ${env.STAGE}\nVersion: ${env.VERSION}\nView build: (${env.BUILD_URL})",
+                channel: "${SLACK_CHANNEL}")
+        }
+
+        aborted {
+            slackSend (color: '#FF9500',
+                message: "ABORTED\nJob: '${env.BUILD_TAG}'\nStage: ${env.STAGE}\nVersion: ${env.VERSION}\nView build: (${env.BUILD_URL})",
+                channel: "${SLACK_CHANNEL}")
+        }
+
+        cleanup {
+            junit './*_test.xml'
+            publishCoverage adapters: [istanbulCobertura('unit-coverage.xml')], sourceFileResolver: sourceFiles('STORE_ALL_BUILD'), tag: 'cov'
+            publishCoverage adapters: [istanbulCobertura('system-coverage.xml')], sourceFileResolver: sourceFiles('STORE_ALL_BUILD'), tag: 'cov'
+            sh "make clean-docker"
+            cleanWs();
+        }
+    }
+}

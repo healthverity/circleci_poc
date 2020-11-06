@@ -1,0 +1,16 @@
+**
+
+#========
+# Config
+#========
+!.coveragerc
+!pylintrc
+!pytest.ini
+
+#========
+# Python
+#========
+!*.py
+!test/
+!requirements.txt
+!package_name/

@@ -1,0 +1,41 @@
+---
+version: "3.8"
+
+services:
+  cli:
+    build:
+      context: ./
+    volumes:
+      - ./:/pkg/
+    environment:
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_ACCESS_KEY_ID
+      - AWS_DEFAULT_REGION
+      - VERSION
+  
+  pennyworth-localstack:
+    image: localstack/localstack:latest
+    container_name: pennyworth-localstack
+    ports:
+      - 45660:4566 # Default port for all services
+    networks:
+      - pennyworth_default
+    environment:
+      # Remove unneeded services from this list
+      - SERVICES=apigateway,dynamodb,dynamodbstreams,s3,sqs,sns,ssm,secretsmanager,lambda
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_DEFAULT_REGION
+    healthcheck:
+      test: "grep 'Resources ready.' /tmp/localstack_infra.log || exit 1"
+      interval: 1s
+      timeout: 5s
+      retries: 120
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+networks:
+  pennyworth_default:
